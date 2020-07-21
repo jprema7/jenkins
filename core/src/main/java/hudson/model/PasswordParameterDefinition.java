@@ -46,10 +46,16 @@ public class PasswordParameterDefinition extends SimpleParameterDefinition {
 
     private Secret defaultValue;
 
-    @DataBoundConstructor
+    @Deprecated
     public PasswordParameterDefinition(String name, String defaultValue, String description) {
         super(name, description);
         this.defaultValue = Secret.fromString(defaultValue);
+    }
+
+    @DataBoundConstructor
+    public PasswordParameterDefinition(String name, Secret defaultValueAsSecret, String description) {
+        super(name, description);
+        this.defaultValue = defaultValueAsSecret;
     }
 
     @Override
@@ -96,16 +102,11 @@ public class PasswordParameterDefinition extends SimpleParameterDefinition {
         this.defaultValue = Secret.fromString(defaultValue);
     }
 
-    @Extension @Symbol({"password","nonStoredPasswordParam"})
+    @Extension @Symbol({"password"})
     public final static class ParameterDescriptorImpl extends ParameterDescriptor {
         @Override
         public String getDisplayName() {
             return Messages.PasswordParameterDefinition_DisplayName();
-        }
-        
-        @Override
-        public String getHelpFile() {
-            return "/help/parameter/string.html";
         }
     }
 }

@@ -28,13 +28,11 @@ import hudson.Extension;
 import hudson.ExtensionPoint;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
-import hudson.model.Descriptor.FormException;
 import hudson.model.View;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import jenkins.model.GlobalConfiguration;
 import jenkins.model.Jenkins;
 import hudson.model.ListView;
@@ -48,7 +46,7 @@ import org.kohsuke.stapler.StaplerRequest;
  * Extension point for adding a ViewsTabBar header to Projects {@link ListView}.
  *
  * <p>
- * This object must have the <tt>viewTabs.jelly</tt>. This view
+ * This object must have the {@code viewTabs.jelly}. This view
  * is called once when the project views main panel is built.
  * The "views" attribute is set to the "Collection of views".
  *
@@ -65,7 +63,7 @@ public abstract class ViewsTabBar extends AbstractDescribableImpl<ViewsTabBar> i
      * Returns all the registered {@link ViewsTabBar} descriptors.
      */
     public static DescriptorExtensionList<ViewsTabBar, Descriptor<ViewsTabBar>> all() {
-        return Jenkins.getInstance().<ViewsTabBar, Descriptor<ViewsTabBar>>getDescriptorList(ViewsTabBar.class);
+        return Jenkins.get().getDescriptorList(ViewsTabBar.class);
     }
 
     @Override
@@ -80,12 +78,12 @@ public abstract class ViewsTabBar extends AbstractDescribableImpl<ViewsTabBar> i
      * @return the sorted views
      * @since 2.37
      */
-    @Nonnull
+    @NonNull
     @Restricted(NoExternalUse.class)
     @SuppressWarnings("unused") // invoked from stapler view
-    public List<View> sort(@Nonnull List<? extends View> views) {
-        List<View> result = new ArrayList<View>(views);
-        Collections.sort(result, new Comparator<View>() {
+    public List<View> sort(@NonNull List<? extends View> views) {
+        List<View> result = new ArrayList<>(views);
+        result.sort(new Comparator<View>() {
             @Override
             public int compare(View o1, View o2) {
                 return o1.getDisplayName().compareTo(o2.getDisplayName());

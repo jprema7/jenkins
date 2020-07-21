@@ -32,8 +32,8 @@ import hudson.slaves.SlaveComputer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import jenkins.model.Jenkins;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
@@ -58,7 +58,7 @@ public class RemotingWorkDirSettings implements Describable<RemotingWorkDirSetti
     private final boolean disabled;
     @CheckForNull
     private final String  workDirPath;
-    @Nonnull
+    @NonNull
     private final String  internalDir;
     private final boolean failIfWorkDirIsMissing;
 
@@ -117,14 +117,14 @@ public class RemotingWorkDirSettings implements Describable<RemotingWorkDirSetti
         return workDirPath;
     }
 
-    @Nonnull
+    @NonNull
     public String getInternalDir() {
         return internalDir;
     }
 
     @Override
     public Descriptor<RemotingWorkDirSettings> getDescriptor() {
-        return Jenkins.getInstance().getDescriptor(RemotingWorkDirSettings.class);
+        return Jenkins.get().getDescriptor(RemotingWorkDirSettings.class);
     }
 
     /**
@@ -132,7 +132,7 @@ public class RemotingWorkDirSettings implements Describable<RemotingWorkDirSetti
      * @param computer Computer, for which the arguments are being created
      * @return Non-modifiable list of command-line arguments
      */
-    public List<String> toCommandLineArgs(@Nonnull SlaveComputer computer) {
+    public List<String> toCommandLineArgs(@NonNull SlaveComputer computer) {
         if(disabled) {
             return Collections.emptyList();
         }
@@ -152,7 +152,7 @@ public class RemotingWorkDirSettings implements Describable<RemotingWorkDirSetti
         
         if (!DEFAULT_INTERNAL_DIR.equals(internalDir)) {
             args.add("-internalDir");
-            args.add(internalDir);;
+            args.add(internalDir);
         }
         
         if (failIfWorkDirIsMissing) {
@@ -170,9 +170,9 @@ public class RemotingWorkDirSettings implements Describable<RemotingWorkDirSetti
      *         It may be empty if the working directory is disabled or
      *         if the Computer type is not {@link SlaveComputer}.
      */
-    @Nonnull
+    @NonNull
     @Restricted(NoExternalUse.class)
-    public String toCommandLineString(@Nonnull SlaveComputer computer) {
+    public String toCommandLineString(@NonNull SlaveComputer computer) {
         if(disabled) {
             return "";
         }
@@ -214,7 +214,7 @@ public class RemotingWorkDirSettings implements Describable<RemotingWorkDirSetti
      * 
      * @return Legacy value: disabled work directory.
      */
-    @Nonnull
+    @NonNull
     public static RemotingWorkDirSettings getDisabledDefaults() {
         return LEGACY_DEFAULT;
     }
@@ -222,7 +222,7 @@ public class RemotingWorkDirSettings implements Describable<RemotingWorkDirSetti
     /**
      * Gets default settings of the enabled work directory.
      */
-    @Nonnull
+    @NonNull
     public static RemotingWorkDirSettings getEnabledDefaults() {
         return ENABLED_DEFAULT;
     }

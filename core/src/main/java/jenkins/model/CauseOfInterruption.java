@@ -25,6 +25,7 @@ package jenkins.model;
 
 import hudson.console.ModelHyperlinkNote;
 import hudson.model.Executor;
+import hudson.model.Result;
 import hudson.model.TaskListener;
 import hudson.model.User;
 import org.kohsuke.stapler.export.Exported;
@@ -32,14 +33,14 @@ import org.kohsuke.stapler.export.ExportedBean;
 
 import java.io.Serializable;
 import java.util.Collections;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 /**
  * Records why an {@linkplain Executor#interrupt() executor is interrupted}.
  *
  * <h2>View</h2>
- * <tt>summary.groovy/.jelly</tt> should do one-line HTML rendering to be used while rendering
+ * {@code summary.groovy/.jelly} should do one-line HTML rendering to be used while rendering
  * "build history" widget, next to the blocking build. By default it simply renders
  * {@link #getShortDescription()} text.
  *
@@ -76,14 +77,14 @@ public abstract class CauseOfInterruption implements Serializable {
      */
     public static final class UserInterruption extends CauseOfInterruption {
         
-        @Nonnull
+        @NonNull
         private final String user;
 
-        public UserInterruption(@Nonnull User user) {
+        public UserInterruption(@NonNull User user) {
             this.user = user.getId();
         }
 
-        public UserInterruption(@Nonnull String userId) {
+        public UserInterruption(@NonNull String userId) {
             this.user = userId;
         }
 
@@ -92,7 +93,7 @@ public abstract class CauseOfInterruption implements Serializable {
          * @return User ID
          * @since 2.31
          */
-        @Nonnull
+        @NonNull
         public String getUserId() {
             return user;
         }
@@ -102,7 +103,7 @@ public abstract class CauseOfInterruption implements Serializable {
          * @return User instance if it can be located.
          *         Result of {@link User#getUnknown()} otherwise
          */
-        @Nonnull
+        @NonNull
         public User getUser() {
             final User userInstance = getUserOrNull();
             return userInstance != null ? userInstance : User.getUnknown();

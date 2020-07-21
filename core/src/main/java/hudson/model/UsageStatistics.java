@@ -23,11 +23,11 @@
  */
 package hudson.model;
 
-import com.trilead.ssh2.crypto.Base64;
 import hudson.PluginWrapper;
 import hudson.Util;
 import hudson.Extension;
 import hudson.node_monitors.ArchitectureMonitor.DescriptorImpl;
+import hudson.security.Permission;
 import hudson.util.Secret;
 import static java.util.concurrent.TimeUnit.DAYS;
 
@@ -36,6 +36,7 @@ import net.sf.json.JSONObject;
 import org.apache.commons.io.output.ByteArrayOutputStream;
 import org.kohsuke.stapler.StaplerRequest;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import javax.crypto.Cipher;
 import javax.crypto.CipherOutputStream;
 import javax.crypto.KeyGenerator;
@@ -50,6 +51,7 @@ import java.io.OutputStream;
 import java.io.FilterInputStream;
 import java.io.InputStream;
 import java.io.DataInputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.Key;
 import java.security.KeyFactory;
@@ -58,6 +60,7 @@ import java.security.interfaces.RSAKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import com.jcraft.jzlib.GZIPOutputStream;
 import jenkins.util.SystemProperties;
@@ -95,7 +98,7 @@ public class UsageStatistics extends PageDecorator implements PersistentDescript
      */
     public boolean isDue() {
         // user opted out. no data collection.
-        if(!Jenkins.getInstance().isUsageStatisticsCollected() || DISABLED)     return false;
+        if(!Jenkins.get().isUsageStatisticsCollected() || DISABLED)     return false;
         
         long now = System.currentTimeMillis();
         if(now - lastAttempt > DAY) {
@@ -121,7 +124,7 @@ public class UsageStatistics extends PageDecorator implements PersistentDescript
      * Gets the encrypted usage stat data to be sent to the Hudson server.
      */
     public String getStatData() throws IOException {
-        Jenkins j = Jenkins.getInstance();
+        Jenkins j = Jenkins.get();
 
         JSONObject o = new JSONObject();
         o.put("stat",1);
@@ -129,7 +132,7 @@ public class UsageStatistics extends PageDecorator implements PersistentDescript
         o.put("servletContainer", j.servletContext.getServerInfo());
         o.put("version", Jenkins.VERSION);
 
-        List<JSONObject> nodes = new ArrayList<JSONObject>();
+        List<JSONObject> nodes = new ArrayList<>();
         for( Computer c : j.getComputers() ) {
             JSONObject  n = new JSONObject();
             if(c.getNode()==j) {
@@ -145,7 +148,7 @@ public class UsageStatistics extends PageDecorator implements PersistentDescript
         }
         o.put("nodes",nodes);
 
-        List<JSONObject> plugins = new ArrayList<JSONObject>();
+        List<JSONObject> plugins = new ArrayList<>();
         for( PluginWrapper pw : j.getPluginManager().getPlugins() ) {
             if(!pw.isActive())  continue;   // treat disabled plugins as if they are uninstalled
             JSONObject p = new JSONObject();
@@ -159,7 +162,7 @@ public class UsageStatistics extends PageDecorator implements PersistentDescript
         // capture the descriptors as these should be small compared with the number of items
         // so we will walk all items only once and we can short-cut the search of descriptors
         TopLevelItemDescriptor[] descriptors = Items.all().toArray(new TopLevelItemDescriptor[0]);
-        int counts[] = new int[descriptors.length];
+        int[] counts = new int[descriptors.length];
         for (TopLevelItem item: j.allItems(TopLevelItem.class)) {
             TopLevelItemDescriptor d = item.getDescriptor();
             for (int i = 0; i < descriptors.length; i++) {
@@ -181,21 +184,27 @@ public class UsageStatistics extends PageDecorator implements PersistentDescript
             // json -> UTF-8 encode -> gzip -> encrypt -> base64 -> string
             try (OutputStream cipheros = new CombinedCipherOutputStream(baos,getKey(),"AES");
                  OutputStream zipos = new GZIPOutputStream(cipheros);
-                 OutputStreamWriter w = new OutputStreamWriter(zipos, "UTF-8")) {
+                 OutputStreamWriter w = new OutputStreamWriter(zipos, StandardCharsets.UTF_8)) {
                 o.write(w);
             }
 
-            return new String(Base64.encode(baos.toByteArray()));
+            return new String(Base64.getEncoder().encode(baos.toByteArray()));
         } catch (GeneralSecurityException e) {
             throw new Error(e); // impossible
         }
+    }
+
+    @NonNull
+    @Override
+    public Permission getRequiredGlobalConfigPagePermission() {
+        return Jenkins.MANAGE;
     }
 
     @Override
     public boolean configure(StaplerRequest req, JSONObject json) throws FormException {
         try {
             // for backward compatibility reasons, this configuration is stored in Jenkins
-            Jenkins.getInstance().setNoUsageStatistics(json.has("usageStatisticsCollected") ? null : true);
+            Jenkins.get().setNoUsageStatistics(json.has("usageStatisticsCollected") ? null : true);
             return true;
         } catch (IOException e) {
             throw new FormException(e,"usageStatisticsCollected");

@@ -36,7 +36,11 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import jenkins.model.Jenkins;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -216,7 +220,7 @@ public class RunTest {
 
     @Test
     public void compareRunsFromSameJobWithDifferentNumbers() throws Exception {
-        final ItemGroup group = Mockito.mock(ItemGroup.class);
+        final Jenkins group = Mockito.mock(Jenkins.class);
         final Job j = Mockito.mock(Job.class);
 
         Mockito.when(j.getParent()).thenReturn(group);
@@ -237,8 +241,8 @@ public class RunTest {
     @Issue("JENKINS-42319")
     @Test
     public void compareRunsFromDifferentParentsWithSameNumber() throws Exception {
-        final ItemGroup group1 = Mockito.mock(ItemGroup.class);
-        final ItemGroup group2 = Mockito.mock(ItemGroup.class);
+        final Jenkins group1 = Mockito.mock(Jenkins.class);
+        final Jenkins group2 = Mockito.mock(Jenkins.class);
         final Job j1 = Mockito.mock(Job.class);
         final Job j2 = Mockito.mock(Job.class);
         Mockito.when(j1.getParent()).thenReturn(group1);

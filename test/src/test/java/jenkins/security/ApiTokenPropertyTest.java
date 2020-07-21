@@ -8,7 +8,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.fail;
 
 import com.gargoylesoftware.htmlunit.FailingHttpStatusCodeException;
@@ -24,6 +24,8 @@ import hudson.model.FreeStyleProject;
 import hudson.model.User;
 import hudson.security.ACL;
 import hudson.security.ACLContext;
+
+import java.net.HttpURLConnection;
 import java.net.URL;
 
 import jenkins.model.Jenkins;
@@ -41,7 +43,7 @@ import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.recipes.LocalData;
 
@@ -69,7 +71,7 @@ public class ApiTokenPropertyTest {
         final String token = t.getApiToken();
 
         // Make sure that user is able to get the token via the interface
-        try (ACLContext _ = ACL.as(u)) {
+        try (ACLContext acl = ACL.as(u)) {
             assertEquals("User is unable to get its own token", token, t.getApiToken());
         }
 
@@ -95,7 +97,7 @@ public class ApiTokenPropertyTest {
     public void security49Upgrade() throws Exception {
         j.jenkins.setSecurityRealm(j.createDummySecurityRealm());
         User u = User.get("foo");
-        String historicalInitialValue = Util.getDigestOf(Jenkins.getInstance().getSecretKey() + ":" + u.getId());
+        String historicalInitialValue = Util.getDigestOf(Jenkins.get().getSecretKey() + ":" + u.getId());
 
         // we won't accept historically used initial value as it may be compromised
         ApiTokenProperty t = new ApiTokenProperty(historicalInitialValue);
@@ -139,12 +141,14 @@ public class ApiTokenPropertyTest {
         final ApiTokenProperty.DescriptorImpl descriptor = (ApiTokenProperty.DescriptorImpl) t.getDescriptor();
         
         // Make sure that Admin can reset a token of another user
-        WebClient wc = createClientForUser("bar");
-        wc.getOptions().setThrowExceptionOnFailingStatusCode(false);
+        WebClient wc = createClientForUser("bar")
+                .withThrowExceptionOnFailingStatusCode(false);
         HtmlPage requirePOST = wc.goTo(foo.getUrl() + "/" + descriptor.getDescriptorUrl()+ "/changeToken");
-        assertEquals("method should not be allowed", 405, requirePOST.getWebResponse().getStatusCode());
+        assertEquals("method should not be allowed", 
+                HttpURLConnection.HTTP_BAD_METHOD, 
+                requirePOST.getWebResponse().getStatusCode());
 
-        wc.getOptions().setThrowExceptionOnFailingStatusCode(true);
+        wc.setThrowExceptionOnFailingStatusCode(true);
         WebRequest request = new WebRequest(new URL(j.getURL().toString() + foo.getUrl() + "/" + descriptor.getDescriptorUrl()+ "/changeToken"), HttpMethod.POST);
         HtmlPage res = wc.getPage(request);
 
@@ -163,7 +167,7 @@ public class ApiTokenPropertyTest {
         WebClient wc = createClientForUser("foo");
         WebRequest wr = new WebRequest(new URL(j.getURL(), "job/bar/build"), HttpMethod.POST);
 
-        assertEquals(201, wc.getPage(wr).getWebResponse().getStatusCode());
+        assertEquals(HttpURLConnection.HTTP_CREATED, wc.getPage(wr).getWebResponse().getStatusCode());
 
         j.waitUntilNoActivity();
 
@@ -171,7 +175,7 @@ public class ApiTokenPropertyTest {
         assertEquals("foo", triggeredBy.getUserId());
     }
 
-    @Nonnull
+    @NonNull
     private WebClient createClientForUser(final String id) throws Exception {
         User u = User.getById(id, true);
         

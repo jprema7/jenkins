@@ -64,7 +64,10 @@ public class ReloadConfigurationCommandTest {
         ReloadConfigurationCommand cmd = new ReloadConfigurationCommand();
         cmd.setTransportAuth(User.get("user").impersonate()); // TODO https://github.com/jenkinsci/jenkins-test-harness/pull/53 use CLICommandInvoker.asUser
         command = new CLICommandInvoker(j, cmd);
-        j.jenkins.setAuthorizationStrategy(new MockAuthorizationStrategy().grant(Jenkins.ADMINISTER).everywhere().toAuthenticated());
+        j.jenkins.setAuthorizationStrategy(new MockAuthorizationStrategy()
+                .grant(Jenkins.READ).everywhere().toAuthenticated()
+                .grant(Jenkins.MANAGE).everywhere().toAuthenticated()
+        );
     }
 
     @Test
@@ -107,19 +110,21 @@ public class ReloadConfigurationCommandTest {
 
     @Test
     public void reloadUserConfig() throws Exception {
+        String originalName = "oldName";
+        String temporaryName = "newName";
         {
         User user = User.get("some_user", true, null);
-        user.setFullName("oldName");
+        user.setFullName(originalName);
         user.save();
+        assertThat(user.getFullName(), equalTo(originalName));
 
-        replace("users/some_user/config.xml", "oldName", "newName");
-
-        assertThat(user.getFullName(), equalTo("oldName"));
+        user.setFullName(temporaryName);
+        assertThat(user.getFullName(), equalTo(temporaryName));
         }
         reloadJenkinsConfigurationViaCliAndWait();
         {
         User user = User.getById("some_user", false);
-        assertThat(user.getFullName(), equalTo("newName"));
+        assertThat(user.getFullName(), equalTo(originalName));
         }
     }
 
@@ -159,7 +164,7 @@ public class ReloadConfigurationCommandTest {
     @Ignore // Until fixed JENKINS-8217
     @Test
     public void reloadDescriptorConfig() throws Exception {
-        Mailer.DescriptorImpl desc = j.jenkins.getExtensionList(Mailer.DescriptorImpl.class).get(0);;
+        Mailer.DescriptorImpl desc = j.jenkins.getExtensionList(Mailer.DescriptorImpl.class).get(0);
         desc.setDefaultSuffix("@oldSuffix");
         desc.save();
 

@@ -5,8 +5,6 @@ import hudson.remoting.Channel;
 import hudson.remoting.ChannelClosedException;
 import jenkins.slaves.RemotingVersionInfo;
 import org.jenkinsci.remoting.RoleChecker;
-import org.kohsuke.accmod.Restricted;
-import org.kohsuke.accmod.restrictions.NoExternalUse;
 
 
 /**
@@ -38,7 +36,7 @@ public abstract class MasterToSlaveCallable<V, T extends Throwable> implements C
         return ch;
     }
 
-    //TODO: remove once Callable#getOpenChannelOrFail() once Minimaumsupported Remoting version is 3.15 or above
+    //TODO: remove Callable#getOpenChannelOrFail() once minimum supported Remoting version is 3.15 or above
     @Override
     public Channel getOpenChannelOrFail() throws ChannelClosedException {
         final Channel ch = getChannelOrFail();

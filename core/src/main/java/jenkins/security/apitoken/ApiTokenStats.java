@@ -23,15 +23,18 @@
  */
 package jenkins.security.apitoken;
 
+import com.google.common.annotations.VisibleForTesting;
 import hudson.BulkChange;
 import hudson.Util;
 import hudson.XmlFile;
 import hudson.model.Saveable;
+import hudson.model.User;
 import hudson.model.listeners.SaveableListener;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -54,13 +57,17 @@ public class ApiTokenStats implements Saveable {
      */
     private List<SingleTokenStats> tokenStats;
     
-    private transient File parent;
+    private transient User user;
     
-    public ApiTokenStats() {
+    @VisibleForTesting 
+    transient File parent;
+    
+    @VisibleForTesting 
+    ApiTokenStats() {
         this.init();
     }
     
-    private ApiTokenStats readResolve() {
+    private Object readResolve() {
         this.init();
         return this;
     }
@@ -94,7 +101,14 @@ public class ApiTokenStats implements Saveable {
         this.tokenStats = new ArrayList<>(temp.values());
     }
     
-    void setParent(@Nonnull File parent) {
+    /**
+     * @deprecated use {@link #load(User)} instead of {@link #load(File)}
+     * The method will be removed in a later version as it's an internal one
+     */
+    @Deprecated
+    // to force even if someone wants to remove the one from the class
+    @Restricted(NoExternalUse.class)
+    void setParent(@NonNull File parent) {
         this.parent = parent;
     }
     
@@ -105,7 +119,7 @@ public class ApiTokenStats implements Saveable {
     /**
      * Will trigger the save if there is some modification
      */
-    public synchronized void removeId(@Nonnull String tokenUuid) {
+    public synchronized void removeId(@NonNull String tokenUuid) {
         if(areStatsDisabled()){
             return;
         }
@@ -116,15 +130,20 @@ public class ApiTokenStats implements Saveable {
         }
     }
     
-    /**
+   /**
      * Will trigger the save
      */
-    public synchronized @Nonnull SingleTokenStats updateUsageForId(@Nonnull String tokenUuid) {
+    public @NonNull SingleTokenStats updateUsageForId(@NonNull String tokenUuid) {
         if(areStatsDisabled()){
             return new SingleTokenStats(tokenUuid);
         }
         
-        SingleTokenStats stats = findById(tokenUuid)
+        return updateUsageForIdIfNeeded(tokenUuid);
+    }
+    
+    
+    private synchronized SingleTokenStats updateUsageForIdIfNeeded(@NonNull String tokenUuid) {
+    	SingleTokenStats stats = findById(tokenUuid)
                 .orElseGet(() -> {
                     SingleTokenStats result = new SingleTokenStats(tokenUuid);
                     tokenStats.add(result);
@@ -137,7 +156,7 @@ public class ApiTokenStats implements Saveable {
         return stats;
     }
     
-    public synchronized @Nonnull SingleTokenStats findTokenStatsById(@Nonnull String tokenUuid) {
+    public synchronized @NonNull SingleTokenStats findTokenStatsById(@NonNull String tokenUuid) {
         if(areStatsDisabled()){
             return new SingleTokenStats(tokenUuid);
         }
@@ -147,7 +166,7 @@ public class ApiTokenStats implements Saveable {
                 .orElse(new SingleTokenStats(tokenUuid));
     }
     
-    private @Nonnull Optional<SingleTokenStats> findById(@Nonnull String tokenUuid) {
+    private @NonNull Optional<SingleTokenStats> findById(@NonNull String tokenUuid) {
         return tokenStats.stream()
                 .filter(s -> s.tokenUuid.equals(tokenUuid))
                 .findFirst();
@@ -165,7 +184,17 @@ public class ApiTokenStats implements Saveable {
         if (BulkChange.contains(this))
             return;
         
-        XmlFile configFile = getConfigFile(parent);
+        /*
+         * Note: the userFolder should never be null at this point.
+         * The userFolder could be null during User creation with the new storage approach
+         * but when this code is called, from token used / removed, the folder exists.
+         */
+        File userFolder = getUserFolder();
+        if (userFolder == null) {
+            return;
+        }
+        
+        XmlFile configFile = getConfigFile(userFolder);
         try {
             configFile.write(this);
             SaveableListener.fireOnChange(this, configFile);
@@ -174,25 +203,41 @@ public class ApiTokenStats implements Saveable {
         }
     }
     
+    private @CheckForNull File getUserFolder(){
+        File userFolder = parent;
+        if (userFolder == null && this.user != null) {
+            userFolder = user.getUserFolder();
+            if (userFolder == null) {
+                LOGGER.log(Level.INFO, "No user folder yet for user {0}", user.getId());
+                return null;
+            }
+            this.parent = userFolder;
+        }
+        
+        return userFolder;
+    }
+    
     /**
      * Loads the data from the disk into the new object.
      * <p>
      * If the file is not present, a fresh new instance is created.
+     * 
+     * @deprecated use {@link #load(User)} instead
+     * The method will be removed in a later version as it's an internal one
      */
-    public static @Nonnull ApiTokenStats load(@Nonnull File parent) {
+    @Deprecated
+    // to force even if someone wants to remove the one from the class
+    @Restricted(NoExternalUse.class) 
+    public static @NonNull ApiTokenStats load(@CheckForNull File parent) {
         // even if we are not using statistics, we load the existing one in case the configuration
         // is enabled afterwards to avoid erasing data
         
-        XmlFile file = getConfigFile(parent);
-        ApiTokenStats apiTokenStats;
-        if (file.exists()) {
-            try {
-                apiTokenStats = (ApiTokenStats) file.unmarshal(ApiTokenStats.class);
-            } catch (IOException e) {
-                LOGGER.log(Level.WARNING, "Failed to load " + file, e);
-                apiTokenStats = new ApiTokenStats();
-            }
-        } else {
+        if (parent == null) {
+            return new ApiTokenStats();
+        }
+    
+        ApiTokenStats apiTokenStats = internalLoad(parent);
+        if (apiTokenStats == null) {
             apiTokenStats = new ApiTokenStats();
         }
     
@@ -200,7 +245,48 @@ public class ApiTokenStats implements Saveable {
         return apiTokenStats;
     }
     
-    protected static XmlFile getConfigFile(File parent) {
+    /**
+     * Loads the data from the user folder into the new object.
+     * <p>
+     * If the folder does not exist yet, a fresh new instance is created.
+     */
+    public static @NonNull ApiTokenStats load(@NonNull User user) {
+        // even if we are not using statistics, we load the existing one in case the configuration
+        // is enabled afterwards to avoid erasing data
+        
+        ApiTokenStats apiTokenStats = null;
+        
+        File userFolder = user.getUserFolder();
+        if (userFolder != null) {
+            apiTokenStats = internalLoad(userFolder);
+        }
+        
+        if (apiTokenStats == null) {
+            apiTokenStats = new ApiTokenStats();
+        }
+        
+        apiTokenStats.user = user;
+        
+        return apiTokenStats;
+    }
+    
+    @VisibleForTesting
+    static @CheckForNull ApiTokenStats internalLoad(@NonNull File userFolder) {
+        ApiTokenStats apiTokenStats = null;
+        XmlFile statsFile = getConfigFile(userFolder);
+        if (statsFile.exists()) {
+            try {
+                apiTokenStats = (ApiTokenStats) statsFile.unmarshal(ApiTokenStats.class);
+                apiTokenStats.parent = userFolder;
+            } catch (IOException e) {
+                LOGGER.log(Level.WARNING, "Failed to load " + statsFile, e);
+            }
+        }
+        
+        return apiTokenStats;
+    }
+    
+    protected static @NonNull XmlFile getConfigFile(@NonNull File parent) {
         return new XmlFile(new File(parent, "apiTokenStats.xml"));
     }
     
@@ -217,7 +303,7 @@ public class ApiTokenStats implements Saveable {
             this.tokenUuid = tokenUuid;
         }
         
-        private SingleTokenStats readResolve() {
+        private Object readResolve() {
             if (this.useCounter != null) {
                 // to avoid negative numbers to be injected
                 this.useCounter = Math.max(0, this.useCounter);

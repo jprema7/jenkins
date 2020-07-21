@@ -27,7 +27,7 @@ import hudson.Functions;
 import hudson.Util;
 import java.io.IOException;
 import java.util.Locale;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 import jenkins.model.Jenkins;
@@ -40,7 +40,7 @@ import org.kohsuke.stapler.StaplerResponse;
  * Represents a failure in a form field doFillXYZ method.
  *
  * <p>
- * Use one of the factory methods to create an instance, then throw it from your <tt>doFillXyz</tt>
+ * Use one of the factory methods to create an instance, then throw it from your {@code doFillXyz}
  * method.
  *
  * @since 2.50
@@ -52,11 +52,11 @@ public abstract class FormFillFailure extends IOException implements HttpRespons
      *
      * @param message Human readable message to be sent.
      */
-    public static FormFillFailure error(@Nonnull String message) {
+    public static FormFillFailure error(@NonNull String message) {
         return errorWithMarkup(Util.escape(message));
     }
 
-    public static FormFillFailure warning(@Nonnull String message) {
+    public static FormFillFailure warning(@NonNull String message) {
         return warningWithMarkup(Util.escape(message));
     }
 
@@ -117,8 +117,8 @@ public abstract class FormFillFailure extends IOException implements HttpRespons
      * This method must be used with care to avoid cross-site scripting
      * attack.
      *
-     * @param message Human readable message to be sent. <tt>error(null)</tt>
-     *                can be used as <tt>ok()</tt>.
+     * @param message Human readable message to be sent. {@code error(null)}
+     *                can be used as {@code ok()}.
      */
     public static FormFillFailure errorWithMarkup(String message) {
         return _errorWithMarkup(message, FormValidation.Kind.ERROR);
@@ -128,7 +128,7 @@ public abstract class FormFillFailure extends IOException implements HttpRespons
         return _errorWithMarkup(message, FormValidation.Kind.WARNING);
     }
 
-    private static FormFillFailure _errorWithMarkup(@Nonnull final String message, final FormValidation.Kind kind) {
+    private static FormFillFailure _errorWithMarkup(@NonNull final String message, final FormValidation.Kind kind) {
         return new FormFillFailure(kind, message) {
             public String renderHtml() {
                 StaplerRequest req = Stapler.getCurrentRequest();

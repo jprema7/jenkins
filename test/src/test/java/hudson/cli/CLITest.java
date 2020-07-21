@@ -37,6 +37,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.net.HttpURLConnection;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
@@ -51,7 +52,10 @@ import org.apache.sshd.common.util.io.ModifiableFileWatcher;
 import static org.hamcrest.Matchers.*;
 import org.jenkinsci.main.modules.cli.auth.ssh.UserPropertyImpl;
 import org.jenkinsci.main.modules.sshd.SSHD;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assume.*;
 import org.junit.ClassRule;
 import org.junit.Rule;
@@ -73,6 +77,7 @@ import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import org.junit.Ignore;
 
 public class CLITest {
 
@@ -153,9 +158,9 @@ public class CLITest {
         User.get("admin").addProperty(new UserPropertyImpl(IOUtils.toString(CLITest.class.getResource("id_rsa.pub"))));
         FreeStyleProject p = r.createFreeStyleProject("p");
         p.getBuildersList().add(new SleepBuilder(TimeUnit.MINUTES.toMillis(5)));
-        doInterrupt(p, "-remoting", "-i", privkey.getAbsolutePath());
         doInterrupt(p, "-ssh", "-user", "admin", "-i", privkey.getAbsolutePath());
         doInterrupt(p, "-http", "-auth", "admin:admin");
+        doInterrupt(p, "-webSocket", "-auth", "admin:admin");
     }
     private void doInterrupt(FreeStyleProject p, String... modeArgs) throws Exception {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -180,7 +185,7 @@ public class CLITest {
         grabCliJar();
 
         String url = r.getURL().toExternalForm() + "not-jenkins/";
-        for (String transport : Arrays.asList("-remoting", "-http", "-ssh")) {
+        for (String transport : Arrays.asList("-http", "-ssh")) {
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             int ret = new Launcher.LocalLauncher(StreamTaskListener.fromStderr()).launch().cmds(
@@ -190,6 +195,7 @@ public class CLITest {
             assertThat(baos.toString(), containsString("There's no Jenkins running at"));
             assertNotEquals(0, ret);
         }
+        // TODO -webSocket currently produces a stack trace
     }
     @TestExtension("reportNotJenkins")
     public static final class NoJenkinsAction extends CrumbExclusion implements UnprotectedRootAction, StaplerProxy {
@@ -233,16 +239,17 @@ public class CLITest {
         sshd.start();
 
         // Sanity check
-        JenkinsRule.WebClient wc = r.createWebClient();
-        wc.getOptions().setRedirectEnabled(false);
-        wc.getOptions().setThrowExceptionOnFailingStatusCode(false);
+        JenkinsRule.WebClient wc = r.createWebClient()
+                .withRedirectEnabled(false)
+                .withThrowExceptionOnFailingStatusCode(false);
+        
         WebResponse rsp = wc.goTo("cli-proxy/").getWebResponse();
-        assertEquals(rsp.getContentAsString(), 302, rsp.getStatusCode());
-        assertEquals(rsp.getContentAsString(), null, rsp.getResponseHeaderValue("X-Jenkins"));
-        assertEquals(rsp.getContentAsString(), null, rsp.getResponseHeaderValue("X-Jenkins-CLI-Port"));
-        assertEquals(rsp.getContentAsString(), null, rsp.getResponseHeaderValue("X-SSH-Endpoint"));
+        assertEquals(rsp.getContentAsString(), HttpURLConnection.HTTP_MOVED_TEMP, rsp.getStatusCode());
+        assertNull(rsp.getContentAsString(), rsp.getResponseHeaderValue("X-Jenkins"));
+        assertNull(rsp.getContentAsString(), rsp.getResponseHeaderValue("X-Jenkins-CLI-Port"));
+        assertNull(rsp.getContentAsString(), rsp.getResponseHeaderValue("X-SSH-Endpoint"));
 
-        for (String transport: Arrays.asList("-remoting", "-http", "-ssh")) {
+        for (String transport: Arrays.asList("-http", "-ssh", "-webSocket")) {
 
             String url = r.getURL().toString() + "cli-proxy/";
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -255,6 +262,31 @@ public class CLITest {
             assertEquals(0, ret);
         }
     }
+
+    @Ignore("TODO sometimes fails, in CI & locally")
+    @Test
+    @Issue("JENKINS-54310")
+    public void readInputAtOnce() throws Exception {
+        home = tempHome();
+        grabCliJar();
+
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            int ret = new Launcher.LocalLauncher(StreamTaskListener.fromStderr())
+                    .launch()
+                    .cmds("java",
+                            "-Duser.home=" + home,
+                            "-jar", jar.getAbsolutePath(),
+                            "-s", r.getURL().toString(),
+                            "list-plugins") // This CLI Command needs -auth option, so when we omit it, the CLI stops before reading the input.
+                    .stdout(baos)
+                    .stderr(baos)
+                    .stdin(CLITest.class.getResourceAsStream("huge-stdin.txt"))
+                    .join();
+            assertThat(baos.toString(), not(containsString("java.io.IOException: Stream is closed")));
+            assertEquals(0, ret);
+        }
+    }
+
     @TestExtension("redirectToEndpointShouldBeFollowed")
     public static final class CliProxyAction extends CrumbExclusion implements UnprotectedRootAction, StaplerProxy {
 
@@ -282,7 +314,7 @@ public class CLITest {
                 public void generateResponse(StaplerRequest req, StaplerResponse rsp, Object node) throws IOException, ServletException {
                     rsp.setHeader("Location", url);
                     rsp.setContentType("text/html");
-                    rsp.setStatus(302);
+                    rsp.setStatus(HttpURLConnection.HTTP_MOVED_TEMP);
                     PrintWriter w = rsp.getWriter();
                     w.append("Redirect to ").append(url);
                 }

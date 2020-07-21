@@ -23,29 +23,35 @@
  */
 package hudson.model;
 
+import hudson.Util;
 import hudson.XmlFile;
 import hudson.security.ACL;
 import hudson.security.ACLContext;
 import hudson.security.AuthorizationMatrixProperty;
 import hudson.security.Permission;
 import hudson.security.ProjectMatrixAuthorizationStrategy;
+import hudson.security.SidACL;
 import hudson.tasks.ArtifactArchiver;
 import hudson.tasks.Fingerprinter;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Map;
 import java.util.Set;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import jenkins.fingerprints.FileFingerprintStorage;
+import jenkins.model.FingerprintFacet;
 import jenkins.model.Jenkins;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.Before;
+import org.junit.rules.TemporaryFolder;
 import org.jvnet.hudson.test.CreateFileBuilder;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.Issue;
@@ -54,7 +60,14 @@ import org.jvnet.hudson.test.SecuredMockFolder;
 import org.jvnet.hudson.test.WorkspaceCopyFileBuilder;
 
 import static org.hamcrest.Matchers.containsString;
-import static org.junit.Assert.*;
+import static org.hamcrest.core.Is.is;
+import static org.hamcrest.core.IsNot.not;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 
@@ -65,15 +78,56 @@ import static org.hamcrest.Matchers.nullValue;
  * @author Oleg Nenashev
  */
 public class FingerprintTest {
-    
+
+    private static final String SOME_MD5 = Util.getDigestOf("whatever");
+
     @Rule
     public JenkinsRule rule = new JenkinsRule();
+
+    @Rule
+    public TemporaryFolder tmp = new TemporaryFolder();
     
     @Before
     public void setupRealm() {
         rule.jenkins.setSecurityRealm(rule.createDummySecurityRealm());
     }
-    
+
+    @Test
+    public void roundTrip() throws Exception {
+        Fingerprint f = new Fingerprint(new Fingerprint.BuildPtr("foo", 13), "stuff&more.jar",
+                Util.fromHexString(SOME_MD5));
+        f.addWithoutSaving("some", 1);
+        f.addWithoutSaving("some", 2);
+        f.addWithoutSaving("some", 3);
+        f.addWithoutSaving("some", 10);
+        f.addWithoutSaving("other", 6);
+        f.save();
+        Fingerprint f2 = Fingerprint.load(SOME_MD5);
+        assertNotNull(f2);
+        assertEquals(f.toString(), f2.toString());
+        f.facets.setOwner(Saveable.NOOP);
+        f.facets.add(new TestFacet(f, 123, "val"));
+        f.save();
+        //System.out.println(FileUtils.readFileToString(xml));
+        f2 = Fingerprint.load(SOME_MD5);
+        assertEquals(f.toString(), f2.toString());
+        assertEquals(1, f2.facets.size());
+        TestFacet facet = (TestFacet) f2.facets.get(0);
+        assertEquals(f2, facet.getFingerprint());
+    }
+
+    public static final class TestFacet extends FingerprintFacet {
+        final String property;
+        public TestFacet(Fingerprint fingerprint, long timestamp, String property) {
+            super(fingerprint, timestamp);
+            this.property = property;
+        }
+        @Override public String toString() {
+            return "TestFacet[" + property + "@" + getTimestamp() + "]";
+        }
+    }
+
+
     @Test
     public void shouldCreateFingerprintsForWorkspace() throws Exception {
         FreeStyleProject project = rule.createFreeStyleProject();
@@ -126,7 +180,7 @@ public class FingerprintTest {
         XmlFile f = new XmlFile(new File(rule.jenkins.getRootDir(), "foo.xml"));
         f.write("Hello, world!");
         try {
-            Fingerprint.load(f.getFile());
+            FileFingerprintStorage.load(f.getFile());
         } catch (IOException ex) {
             assertThat(ex.getMessage(), containsString("Unexpected Fingerprint type"));
             return;
@@ -160,7 +214,7 @@ public class FingerprintTest {
         setJobPermissionsOnce(project1, "user1", Item.READ, Item.DISCOVER);
         setJobPermissionsOnce(project2, "user2", Item.READ, Item.DISCOVER);
 
-        try (ACLContext _ = ACL.as(user1)) {
+        try (ACLContext acl = ACL.as(user1)) {
             Fingerprint.BuildPtr original = fp.getOriginal();
             assertThat("user1 should be able to see the origin", fp.getOriginal(), notNullValue());
             assertEquals("user1 should be able to see the origin's project name", project1.getName(), original.getName());
@@ -169,13 +223,13 @@ public class FingerprintTest {
             assertEquals("Only project1 should be visible to user1", project1.getFullName(), fp._getUsages().get(0).name);
         }
 
-        try (ACLContext _ = ACL.as(user2)) {
+        try (ACLContext acl = ACL.as(user2)) {
             assertThat("user2 should be unable to see the origin", fp.getOriginal(), nullValue());
             assertEquals("Only one usage should be visible to user2", 1, fp._getUsages().size());
             assertEquals("Only project2 should be visible to user2", project2.getFullName(), fp._getUsages().get(0).name);
         }
 
-        try (ACLContext _ = ACL.as(user3)) {
+        try (ACLContext acl = ACL.as(user3)) {
             Fingerprint.BuildPtr original = fp.getOriginal();
             assertThat("user3 should be unable to see the origin", fp.getOriginal(), nullValue());
             assertEquals("All usages should be invisible for user3", 0, fp._getUsages().size());
@@ -193,7 +247,7 @@ public class FingerprintTest {
         User user1 = User.get("user1");   
         setupProjectMatrixAuthStrategy(Jenkins.READ, Item.DISCOVER);
 
-        try (ACLContext _ = ACL.as(user1)) {
+        try (ACLContext acl = ACL.as(user1)) {
             Fingerprint.BuildPtr original = fingerprint.getOriginal();
             assertThat("user1 should able to see the origin", fingerprint.getOriginal(), notNullValue());
             assertEquals("user1 sees the wrong original name with Item.DISCOVER", project.getFullName(), original.getName());
@@ -216,7 +270,7 @@ public class FingerprintTest {
         folder.setPermissions("user1", Item.READ);
         
         // Ensure we can read the original from user account
-        try (ACLContext _ = ACL.as(user1)) {
+        try (ACLContext acl = ACL.as(user1)) {
             assertTrue("Test framework issue: User1 should be able to read the folder", folder.hasPermission(Item.READ));
 
             Fingerprint.BuildPtr original = fingerprint.getOriginal();
@@ -241,7 +295,7 @@ public class FingerprintTest {
         setupProjectMatrixAuthStrategy(Jenkins.READ, Item.DISCOVER);
         
         // Ensure we can read the original from user account
-        try (ACLContext _ = ACL.as(user1)) {
+        try (ACLContext acl = ACL.as(user1)) {
             assertFalse("Test framework issue: User1 should be unable to read the folder", folder.hasPermission(Item.READ));
             assertThat("user1 should be unable to see the origin", fingerprint.getOriginal(), nullValue());
             assertEquals("No jobs should be visible to user1", 0, fingerprint._getUsages().size());
@@ -266,7 +320,7 @@ public class FingerprintTest {
         setupProjectMatrixAuthStrategy(Jenkins.READ, Item.READ, Item.DISCOVER);
         project.delete();
 
-        try (ACLContext _ = ACL.as(user1)) {
+        try (ACLContext acl = ACL.as(user1)) {
             assertThat("user1 should be unable to see the origin", fp.getOriginal(), nullValue());
             assertEquals("No jobs should be visible to user1", 0, fp._getUsages().size());
         }
@@ -284,7 +338,7 @@ public class FingerprintTest {
         setupProjectMatrixAuthStrategy(Jenkins.ADMINISTER);
         project.delete();
 
-        try (ACLContext _ = ACL.as(user1)) {
+        try (ACLContext acl = ACL.as(user1)) {
             Fingerprint.BuildPtr original = fingerprint.getOriginal();
             assertThat("user1 should able to see the origin", fingerprint.getOriginal(), notNullValue());
             assertThat("Job has been deleted, so Job reference should return null", fingerprint.getOriginal().getJob(), nullValue());
@@ -293,9 +347,28 @@ public class FingerprintTest {
             assertEquals("user1 should be able to see the job in usages", 1, fingerprint._getUsages().size());
         }
     }
+
+    @Test
+    public void shouldDeleteFingerprint() throws IOException {
+        String id = SOME_MD5;
+        Fingerprint fingerprintSaved = new Fingerprint(new Fingerprint.BuildPtr("foo", 3),
+                "stuff&more.jar", Util.fromHexString(id));
+        fingerprintSaved.save();
+
+        Fingerprint fingerprintLoaded = Fingerprint.load(id);
+        assertThat(fingerprintLoaded, is(not(nullValue())));
+
+        Fingerprint.delete(id);
+        fingerprintLoaded = Fingerprint.load(id);
+        assertThat(fingerprintLoaded, is(nullValue()));
+
+        Fingerprint.delete(id);
+        fingerprintLoaded = Fingerprint.load(id);
+        assertThat(fingerprintLoaded, is(nullValue()));
+    }
     
-    @Nonnull
-    private Fingerprint getFingerprint(@CheckForNull Run<?, ?> run, @Nonnull String filename) {
+    @NonNull
+    private Fingerprint getFingerprint(@CheckForNull Run<?, ?> run, @NonNull String filename) {
         assertNotNull("Input run is null", run);
         Fingerprinter.FingerprintAction action = run.getAction(Fingerprinter.FingerprintAction.class);
         assertNotNull("Fingerprint action has not been created in " + run, action);
@@ -305,13 +378,13 @@ public class FingerprintTest {
         return fp;
     }
     
-    @Nonnull
+    @NonNull
     private FreeStyleProject createAndRunProjectWithPublisher(String projectName, String fpFileName) 
             throws Exception {
         return createAndRunProjectWithPublisher(null, projectName, fpFileName);
     }
     
-    @Nonnull
+    @NonNull
     private FreeStyleProject createAndRunProjectWithPublisher(@CheckForNull MockFolder folder, 
             String projectName, String fpFileName) throws Exception {
         final FreeStyleProject project;
@@ -328,11 +401,11 @@ public class FingerprintTest {
         return project;
     }
     
-    private void setupProjectMatrixAuthStrategy(@Nonnull Permission ... permissions) {
+    private void setupProjectMatrixAuthStrategy(@NonNull Permission ... permissions) {
         setupProjectMatrixAuthStrategy(true, permissions);
     }
     
-    private void setupProjectMatrixAuthStrategy(boolean inheritFromFolders, @Nonnull Permission ... permissions) {
+    private void setupProjectMatrixAuthStrategy(boolean inheritFromFolders, @NonNull Permission ... permissions) {
         ProjectMatrixAuthorizationStrategy str = inheritFromFolders 
                 ? new ProjectMatrixAuthorizationStrategy()
                 : new NoInheritanceProjectMatrixAuthorizationStrategy();
@@ -342,12 +415,12 @@ public class FingerprintTest {
         rule.jenkins.setAuthorizationStrategy(str);
     }
     //TODO: could be reworked to support multiple assignments
-    private void setJobPermissionsOnce(Job<?,?> job, String username, @Nonnull Permission ... s)
+    private void setJobPermissionsOnce(Job<?,?> job, String username, @NonNull Permission ... s)
             throws IOException {
         assertThat("Cannot assign the property twice", job.getProperty(AuthorizationMatrixProperty.class), nullValue());
         
         Map<Permission, Set<String>> permissions = new HashMap<Permission, Set<String>>(); 
-        HashSet<String> userSpec = new HashSet<String>(Arrays.asList(username));
+        HashSet<String> userSpec = new HashSet<>(Collections.singletonList(username));
 
         for (Permission p : s) {
             permissions.put(p, userSpec);
@@ -365,7 +438,7 @@ public class FingerprintTest {
         public ACL getACL(Job<?, ?> project) {
             AuthorizationMatrixProperty amp = project.getProperty(AuthorizationMatrixProperty.class);
             if (amp != null) {
-                return amp.getACL().newInheritingACL(getRootACL());
+                return amp.getACL().newInheritingACL((SidACL)getRootACL());
             } else {
                 return getRootACL();
             }

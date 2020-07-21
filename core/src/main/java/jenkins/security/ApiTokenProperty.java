@@ -50,7 +50,6 @@ import org.kohsuke.stapler.StaplerResponse;
 
 import java.io.IOException;
 import java.security.SecureRandom;
-import java.text.SimpleDateFormat;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
@@ -61,9 +60,9 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
-import javax.annotation.concurrent.Immutable;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import net.jcip.annotations.Immutable;
 
 import org.apache.commons.lang.StringUtils;
 import org.kohsuke.accmod.Restricted;
@@ -128,7 +127,7 @@ public class ApiTokenProperty extends UserProperty {
             this.tokenStore = new ApiTokenStore();
         }
         if(this.tokenStats == null){
-            this.tokenStats = ApiTokenStats.load(user.getUserFolder());
+            this.tokenStats = ApiTokenStats.load(user);
         }
         if(this.apiToken != null){
             this.tokenStore.regenerateTokenFromLegacyIfRequired(this.apiToken);
@@ -154,8 +153,7 @@ public class ApiTokenProperty extends UserProperty {
      *         if the user has no appropriate permissions.
      * @since 1.426, and since 1.638 the method performs security checks
      */
-    @Nonnull
-    @SuppressFBWarnings("NP_NONNULL_RETURN_VIOLATION")
+    @NonNull
     public String getApiToken() {
         LOGGER.log(Level.FINE, "Deprecated usage of getApiToken");
         if(LOGGER.isLoggable(Level.FINER)){
@@ -174,7 +172,7 @@ public class ApiTokenProperty extends UserProperty {
         return apiToken != null;
     }
     
-    @Nonnull
+    @NonNull
     @Restricted(NoExternalUse.class)
     /*package*/ String getApiTokenInsecure() {
         if(apiToken == null){
@@ -182,7 +180,7 @@ public class ApiTokenProperty extends UserProperty {
         }
 
         String p = apiToken.getPlainText();
-        if (p.equals(Util.getDigestOf(Jenkins.getInstance().getSecretKey()+":"+user.getId()))) {
+        if (p.equals(Util.getDigestOf(Jenkins.get().getSecretKey()+":"+user.getId()))) {
             // if the current token is the initial value created by pre SECURITY-49 Jenkins, we can't use that.
             // force using the newer value
             apiToken = Secret.fromString(p=API_KEY_SEED.mac(user.getId()));
@@ -253,7 +251,7 @@ public class ApiTokenProperty extends UserProperty {
         public final Date lastUseDate;
         public final long numDaysUse;
         
-        public TokenInfoAndStats(@Nonnull ApiTokenStore.HashedToken token, @Nonnull ApiTokenStats.SingleTokenStats stats) {
+        public TokenInfoAndStats(@NonNull ApiTokenStore.HashedToken token, @NonNull ApiTokenStats.SingleTokenStats stats) {
             this.uuid = token.getUuid();
             this.name = token.getName();
             this.creationDate = token.getCreationDate();
@@ -475,7 +473,7 @@ public class ApiTokenProperty extends UserProperty {
             
             final String tokenName;
             if (StringUtils.isBlank(newTokenName)) {
-                tokenName = String.format("Token created on %s", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(ZonedDateTime.now()));
+                tokenName = Messages.Token_Created_on(DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(ZonedDateTime.now()));
             }else{
                 tokenName = newTokenName;
             }

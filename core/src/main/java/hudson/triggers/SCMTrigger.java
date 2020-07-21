@@ -41,11 +41,14 @@ import hudson.model.PersistentDescriptor;
 import hudson.model.Run;
 import hudson.scm.SCM;
 import hudson.scm.SCMDescriptor;
+import hudson.util.DaemonThreadFactory;
 import hudson.util.FlushProofOutputStream;
 import hudson.util.FormValidation;
 import hudson.util.NamingThreadFactory;
 import hudson.util.SequentialExecutionQueue;
 import hudson.util.StreamTaskListener;
+
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.io.File;
 import java.io.IOException;
@@ -217,7 +220,7 @@ public class SCMTrigger extends Trigger<Item> {
     public static class DescriptorImpl extends TriggerDescriptor implements PersistentDescriptor {
 
         private static ThreadFactory threadFactory() {
-            return new NamingThreadFactory(Executors.defaultThreadFactory(), "SCMTrigger");
+            return new NamingThreadFactory(new DaemonThreadFactory(), "SCMTrigger");
         }
 
         /**
@@ -245,10 +248,11 @@ public class SCMTrigger extends Trigger<Item> {
         private static final int THREADS_UPPER_BOUND = 100;
         private static final int THREADS_DEFAULT= 10;
 
-        private void readResolve() {
+        private Object readResolve() {
             if (maximumThreads == 0) {
                 maximumThreads = THREADS_DEFAULT;
             }
+            return this;
         }
 
         public boolean isApplicable(Item item) {
@@ -284,7 +288,7 @@ public class SCMTrigger extends Trigger<Item> {
 
          // originally List<SCMedItem> but known to be used only for logging, in which case the instances are not actually cast to SCMedItem anyway
         public List<SCMTriggerItem> getItemsBeingPolled() {
-            List<SCMTriggerItem> r = new ArrayList<SCMTriggerItem>();
+            List<SCMTriggerItem> r = new ArrayList<>();
             for (Runner i : getRunners())
                 r.add(i.getTarget());
             return r;
@@ -332,7 +336,7 @@ public class SCMTrigger extends Trigger<Item> {
             int count = 0;
             // we are faster walking some items with a lazy iterator than building a list of all items just to query
             // the size. This also lets us check against SCMTriggerItem rather than AbstractProject
-            for (Item item: Jenkins.getInstance().allItems(Item.class)) {
+            for (Item item: Jenkins.get().allItems(Item.class)) {
                 if (item instanceof SCMTriggerItem) {
                     if (++count > 10) {
                         return true;
@@ -382,7 +386,7 @@ public class SCMTrigger extends Trigger<Item> {
                     return FormValidation.ok(Messages.SCMTrigger_no_schedules_hooks());
                 }
             } else {
-                return Jenkins.getInstance().getDescriptorByType(TimerTrigger.DescriptorImpl.class)
+                return Jenkins.get().getDescriptorByType(TimerTrigger.DescriptorImpl.class)
                         .doCheckSpec(value, item);
             }
         }
@@ -466,11 +470,11 @@ public class SCMTrigger extends Trigger<Item> {
         }
 
         public AnnotatedLargeText getPollingLogText() {
-            return new AnnotatedLargeText<BuildAction>(getPollingLogFile(), Charset.defaultCharset(), true, this);
+            return new AnnotatedLargeText<>(getPollingLogFile(), Charset.defaultCharset(), true, this);
         }
         
         /**
-         * Used from <tt>polling.jelly</tt> to write annotated polling log to the given output.
+         * Used from {@code polling.jelly} to write annotated polling log to the given output.
          */
         public void writePollingLogTo(long offset, XMLOutput out) throws IOException {
             // TODO: resurrect compressed log file support
@@ -508,7 +512,7 @@ public class SCMTrigger extends Trigger<Item> {
         }
 
         public String getDisplayName() {
-            Set<SCMDescriptor<?>> descriptors = new HashSet<SCMDescriptor<?>>();
+            Set<SCMDescriptor<?>> descriptors = new HashSet<>();
             for (SCM scm : job().getSCMs()) {
                 descriptors.add(scm.getDescriptor());
             }
@@ -528,7 +532,7 @@ public class SCMTrigger extends Trigger<Item> {
          * @since 1.350
          */
         public void writeLogTo(XMLOutput out) throws IOException {
-            new AnnotatedLargeText<SCMAction>(getLogFile(),Charset.defaultCharset(),true,this).writeHtmlTo(0,out.asWriter());
+            new AnnotatedLargeText<>(getLogFile(), Charset.defaultCharset(), true, this).writeHtmlTo(0,out.asWriter());
         }
     }
 
@@ -556,7 +560,7 @@ public class SCMTrigger extends Trigger<Item> {
             if (actions == null) {
                 additionalActions = new Action[0];
             } else {
-                additionalActions = actions;
+                additionalActions = Arrays.copyOf(actions, actions.length);
             }
         }
         

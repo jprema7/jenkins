@@ -87,7 +87,7 @@ public class BeanBuilder extends GroovyObjectSupport {
     private static final String ANONYMOUS_BEAN = "bean";
     private RuntimeSpringConfiguration springConfig = new DefaultRuntimeSpringConfiguration();
     private BeanConfiguration currentBeanConfig;
-    private Map<String,DeferredProperty> deferredProperties = new HashMap<String,DeferredProperty>();
+    private Map<String,DeferredProperty> deferredProperties = new HashMap<>();
     private ApplicationContext parentCtx;
     private Map binding = new HashMap();
     private ClassLoader classLoader = null;
@@ -172,7 +172,7 @@ public class BeanBuilder extends GroovyObjectSupport {
      */
     public Map<String,BeanDefinition> getBeanDefinitions() {
 
-        Map<String,BeanDefinition> beanDefinitions = new HashMap<String,BeanDefinition>();
+        Map<String,BeanDefinition> beanDefinitions = new HashMap<>();
         for (String beanName : getSpringConfig().getBeanNames()) {
             BeanDefinition bd = getSpringConfig()
                     .getBeanConfig(beanName)
@@ -296,18 +296,6 @@ public class BeanBuilder extends GroovyObjectSupport {
                 beanConfig.setPropertyValue(property, newValue);
             }
 		}
-	}
-	/**
-	 * Takes a resource pattern as (@see org.springframework.core.io.support.PathMatchingResourcePatternResolver)
-	 * This allows you load multiple bean resources in this single builder
-	 *
-	 * eg loadBeans("classpath:*Beans.groovy")
-	 *
-	 * @param resourcePattern
-	 * @throws IOException When the path cannot be matched
-	 */
-	public void loadBeans(String resourcePattern) throws IOException {
-		loadBeans(new PathMatchingResourcePatternResolver().getResources(resourcePattern));
 	}
 
 	/**

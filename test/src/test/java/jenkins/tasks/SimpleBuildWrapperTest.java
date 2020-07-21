@@ -54,7 +54,9 @@ import java.io.Serializable;
 import java.util.Collections;
 import java.util.Locale;
 import org.junit.Test;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import org.junit.Assume;
 import org.junit.ClassRule;
 import org.junit.Rule;
@@ -187,10 +189,10 @@ public class SimpleBuildWrapperTest {
         private static class UpcaseFilter extends ConsoleLogFilter implements Serializable {
             private static final long serialVersionUID = 1;
             @SuppressWarnings("rawtypes") // inherited
-            @Override public OutputStream decorateLogger(AbstractBuild _ignore, final OutputStream logger) throws IOException, InterruptedException {
-                return new LineTransformationOutputStream() {
+            @Override public OutputStream decorateLogger(AbstractBuild _ignore, OutputStream logger) throws IOException, InterruptedException {
+                return new LineTransformationOutputStream.Delegating(logger) {
                     @Override protected void eol(byte[] b, int len) throws IOException {
-                        logger.write(new String(b, 0, len).toUpperCase(Locale.ROOT).getBytes());
+                        out.write(new String(b, 0, len).toUpperCase(Locale.ROOT).getBytes());
                     }
                 };
             }

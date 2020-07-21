@@ -42,7 +42,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import jenkins.model.Jenkins;
 import org.apache.commons.io.IOUtils;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -53,10 +56,13 @@ import org.kohsuke.stapler.StaplerRequest;
 import static org.powermock.api.mockito.PowerMockito.mock;
 import static org.powermock.api.mockito.PowerMockito.mockStatic;
 import static org.powermock.api.mockito.PowerMockito.when;
+
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 @RunWith(PowerMockRunner.class)
+@PowerMockIgnore({"com.sun.org.apache.xerces.*", "javax.xml.*", "org.xml.*"})
 public class FunctionsTest {
     @Test
     public void testGetActionUrl_absoluteUriWithAuthority(){
@@ -263,7 +269,7 @@ public class FunctionsTest {
     private Jenkins createMockJenkins() {
         mockStatic(Jenkins.class);
         Jenkins j = mock(Jenkins.class);
-        when(Jenkins.getInstance()).thenReturn(j);
+        when(Jenkins.get()).thenReturn(j);
         return j;
     }
     
@@ -277,7 +283,7 @@ public class FunctionsTest {
     @Test
     @PrepareForTest(Stapler.class)
     public void testGetActionUrl_unparseable() throws Exception{
-        assertEquals(null, Functions.getActionUrl(null, createMockAction("http://nowhere.net/stuff?something=^woohoo")));
+        assertNull(Functions.getActionUrl(null, createMockAction("http://example.net/stuff?something=^woohoo")));
     }
 
     private static Action createMockAction(String uri) {
@@ -556,5 +562,4 @@ public class FunctionsTest {
             return this;
         }
     }
-
 }

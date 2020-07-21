@@ -23,7 +23,6 @@
  */
 package hudson.model;
 
-import com.gargoylesoftware.htmlunit.FailingHttpStatusCodeException;
 import com.gargoylesoftware.htmlunit.HttpMethod;
 import com.gargoylesoftware.htmlunit.Page;
 import com.gargoylesoftware.htmlunit.WebRequest;
@@ -56,7 +55,14 @@ import jenkins.security.QueueItemAuthenticatorConfiguration;
 import org.acegisecurity.context.SecurityContextHolder;
 
 import static org.hamcrest.core.StringEndsWith.endsWith;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertNull;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -209,8 +215,8 @@ public class NodeTest {
         assertEquals("Cause of blockage should be reserved label.", message, node.canTake(item2).getShortDescription());
         node.getNodeProperties().add(new NodePropertyImpl());
         notTake = true;
-        assertNotNull("Node should not take project because node property not alow it.", node.canTake(item));
-        assertTrue("Cause of blockage should be bussy label.", node.canTake(item) instanceof CauseOfBlockage.BecauseLabelIsBusy);
+        assertNotNull("Node should not take project because node property does not allow it.", node.canTake(item));
+        assertTrue("Cause of blockage should be busy label.", node.canTake(item) instanceof CauseOfBlockage.BecauseLabelIsBusy);
         User user = User.get("John");
         GlobalMatrixAuthorizationStrategy auth = new GlobalMatrixAuthorizationStrategy();
         j.jenkins.setAuthorizationStrategy(auth);
@@ -222,7 +228,7 @@ public class NodeTest {
         QueueItemAuthenticatorConfiguration.get().getAuthenticators().add(new MockQueueItemAuthenticator(Collections.singletonMap(project.getFullName(), user.impersonate())));
         assertNotNull("Node should not take project because user does not have build permission.", node.canTake(item));
         message = Messages._Node_LackingBuildPermission(item.authenticate().getName(),node.getNodeName()).toString();
-        assertEquals("Cause of blockage should be bussy label.", message, node.canTake(item).getShortDescription());
+        assertEquals("Cause of blockage should be build permission label.", message, node.canTake(item).getShortDescription());
     }
 
     @Test
@@ -448,12 +454,10 @@ public class NodeTest {
         WebRequest settings = new WebRequest(wc.createCrumbedUrl("computer/(master)/config.xml"));
         settings.setHttpMethod(HttpMethod.POST);
         settings.setRequestBody("<hudson/>");
-        try {
-            Page page = wc.getPage(settings);
-            fail(page.getWebResponse().getContentAsString());
-        } catch (FailingHttpStatusCodeException x) {
-            assertEquals(HttpURLConnection.HTTP_BAD_REQUEST, x.getStatusCode());
-        }
+
+        wc.setThrowExceptionOnFailingStatusCode(false);
+        Page page = wc.getPage(settings);
+        assertEquals(HttpURLConnection.HTTP_BAD_REQUEST, page.getWebResponse().getStatusCode());
     }
 
     /**
@@ -505,7 +509,7 @@ public class NodeTest {
         public Collection<LabelAtom> findLabels(Node node) {
             List<LabelAtom> atoms = new ArrayList<LabelAtom>();
             if(addDynamicLabel){
-                atoms.add(Jenkins.getInstance().getLabelAtom("dynamicLabel"));
+                atoms.add(Jenkins.get().getLabelAtom("dynamicLabel"));
             }
             return atoms;
 

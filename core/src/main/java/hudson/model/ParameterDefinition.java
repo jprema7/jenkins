@@ -33,7 +33,8 @@ import hudson.util.DescriptorList;
 import java.io.Serializable;
 import java.io.IOException;
 import java.util.logging.Logger;
-import javax.annotation.CheckForNull;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
@@ -75,18 +76,18 @@ import org.kohsuke.stapler.export.ExportedBean;
  *
  * <h2>Persistence</h2>
  * <p>
- * Instances of {@link ParameterDefinition}s are persisted into job <tt>config.xml</tt>
+ * Instances of {@link ParameterDefinition}s are persisted into job {@code config.xml}
  * through XStream.
  *
  *
  * <h2>Associated Views</h2>
  * <h3>config.jelly</h3>
- * {@link ParameterDefinition} class uses <tt>config.jelly</tt> to contribute a form
+ * {@link ParameterDefinition} class uses {@code config.jelly} to contribute a form
  * fragment in the job configuration screen. Values entered there are fed back to
  * {@link ParameterDescriptor#newInstance(StaplerRequest, JSONObject)} to create {@link ParameterDefinition}s.
  *
  * <h3>index.jelly</h3>
- * The <tt>index.jelly</tt> view contributes a form fragment in the page where the user
+ * The {@code index.jelly} view contributes a form fragment in the page where the user
  * enters actual values of parameters for a build. The result of this form submission
  * is then fed to {@link ParameterDefinition#createValue(StaplerRequest, JSONObject)} to
  * create {@link ParameterValue}s.
@@ -103,11 +104,15 @@ public abstract class ParameterDefinition implements
 
     private final String description;
 
-    public ParameterDefinition(String name) {
+    public ParameterDefinition(@NonNull String name) {
         this(name, null);
     }
 
-    public ParameterDefinition(String name, String description) {
+    public ParameterDefinition(@NonNull String name, String description) {
+        //Checking as pipeline does not enforce annotations
+        if (name == null) {
+            throw new IllegalArgumentException("Parameter name must be non-null");
+        }
         this.name = name;
         this.description = description;
     }
@@ -129,11 +134,13 @@ public abstract class ParameterDefinition implements
     }
     
     @Exported
+    @NonNull
     public String getName() {
         return name;
     }
 
     @Exported
+    @CheckForNull
     public String getDescription() {
         return description;
     }
@@ -142,21 +149,20 @@ public abstract class ParameterDefinition implements
      * return parameter description, applying the configured MarkupFormatter for jenkins instance.
      * @since 1.521
      */
+    @CheckForNull
     public String getFormattedDescription() {
         try {
-            return Jenkins.getInstance().getMarkupFormatter().translate(description);
+            return Jenkins.get().getMarkupFormatter().translate(description);
         } catch (IOException e) {
             LOGGER.warning("failed to translate description using configured markup formatter");
             return "";
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
+    @NonNull
     public ParameterDescriptor getDescriptor() {
-        return (ParameterDescriptor) Jenkins.getInstance().getDescriptorOrDie(getClass());
+        return (ParameterDescriptor) Jenkins.get().getDescriptorOrDie(getClass());
     }
 
     /**
@@ -220,10 +226,21 @@ public abstract class ParameterDefinition implements
     }
 
     /**
+     * Checks whether a given value is valid for this definition.
+     * @since TODO
+     * @param value The value to validate.
+     * @return True if the value is valid for this definition. False if it is invalid.
+     */
+    public boolean isValid(ParameterValue value) {
+        // The base implementation just accepts the value.
+        return true;
+    }
+
+    /**
      * Returns all the registered {@link ParameterDefinition} descriptors.
      */
     public static DescriptorExtensionList<ParameterDefinition,ParameterDescriptor> all() {
-        return Jenkins.getInstance().<ParameterDefinition,ParameterDescriptor>getDescriptorList(ParameterDefinition.class);
+        return Jenkins.get().getDescriptorList(ParameterDefinition.class);
     }
 
     /**
@@ -232,7 +249,7 @@ public abstract class ParameterDefinition implements
      *      Use {@link #all()} for read access, and {@link Extension} for registration.
      */
     @Deprecated
-    public static final DescriptorList<ParameterDefinition> LIST = new DescriptorList<ParameterDefinition>(ParameterDefinition.class);
+    public static final DescriptorList<ParameterDefinition> LIST = new DescriptorList<>(ParameterDefinition.class);
 
     public abstract static class ParameterDescriptor extends
             Descriptor<ParameterDefinition> {

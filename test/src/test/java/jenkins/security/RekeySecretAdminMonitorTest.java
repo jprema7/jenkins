@@ -5,13 +5,11 @@ import com.gargoylesoftware.htmlunit.html.DomNodeUtil;
 import com.gargoylesoftware.htmlunit.html.HtmlButton;
 import com.gargoylesoftware.htmlunit.html.HtmlForm;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
-import com.trilead.ssh2.crypto.Base64;
 import hudson.FilePath;
 import hudson.Util;
 import hudson.util.Secret;
 import hudson.util.SecretHelper;
 import org.apache.commons.io.FileUtils;
-import org.hamcrest.CoreMatchers;
 import org.jvnet.hudson.test.HudsonTestCase;
 import org.jvnet.hudson.test.recipes.Recipe.Runner;
 import org.xml.sax.SAXException;
@@ -21,9 +19,12 @@ import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.regex.Pattern;
-
-import static org.junit.Assert.assertThat;
+import java.util.stream.Stream;
+import org.hamcrest.MatcherAssert;
+import org.hamcrest.Matchers;
 
 /**
  * @author Kohsuke Kawaguchi
@@ -83,7 +84,7 @@ public class RekeySecretAdminMonitorTest extends HudsonTestCase {
     private void verifyRewrite(File dir) throws Exception {
         File xml = new File(dir, "foo.xml");
         Pattern pattern = Pattern.compile("<foo>"+plain_regex_match+"</foo>");
-        assertTrue(pattern.matcher(FileUtils.readFileToString(xml).trim()).matches());
+        MatcherAssert.assertThat(FileUtils.readFileToString(xml, StandardCharsets.UTF_8).trim(), Matchers.matchesRegex(pattern));
     }
 
     // TODO sometimes fails: "Invalid request submission: {json=[Ljava.lang.String;@2c46358e, .crumb=[Ljava.lang.String;@35661457}"
@@ -132,7 +133,18 @@ public class RekeySecretAdminMonitorTest extends HudsonTestCase {
     }
 
     private HtmlButton getButton(HtmlForm form, int index) {
-        return form.<HtmlButton>getHtmlElementsByTagName("button").get(index);
+        // due to the removal of method HtmlElement.getHtmlElementsByTagName
+        Stream<HtmlButton> buttonStream = form.getElementsByTagName("button").stream()
+                .filter(HtmlButton.class::isInstance)
+                .map(HtmlButton.class::cast);
+
+        if (index > 0) {
+            buttonStream = buttonStream.skip(index - 1);
+        }
+        
+        return buttonStream
+                .findFirst()
+                .orElse(null);
     }
 
     public void testScanOnBoot() throws Exception {
@@ -154,7 +166,7 @@ public class RekeySecretAdminMonitorTest extends HudsonTestCase {
     private String encryptOld(String str) throws Exception {
         Cipher cipher = Secret.getCipher("AES");
         cipher.init(Cipher.ENCRYPT_MODE, Util.toAes128Key(TEST_KEY));
-        return new String(Base64.encode(cipher.doFinal((str + "::::MAGIC::::").getBytes("UTF-8"))));
+        return new String(Base64.getEncoder().encode(cipher.doFinal((str + "::::MAGIC::::").getBytes("UTF-8"))));
     }
 
     private String encryptNew(String str) {
